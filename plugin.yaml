@@ -1,0 +1,32 @@
+name: stepup
+version: "0.1.0"
+description: >
+  Authenticator-app 2FA for your agent. Protected tools called from messaging
+  platforms stay locked until the sender proves presence with a one-time code.
+author: Defi Sensei
+requires_hermes: ">=0.23.0"
+provides_hooks:
+  - pre_llm_call
+  - pre_tool_call
+  - post_gateway_admission
+requires_env:
+  - name: STEPUP_TOTP_SECRET
+    description: "Base32 TOTP secret. Generate one with: python3 tools/new_secret.py"
+    secret: true
+config_schema:
+  protected_tools:
+    type: list
+    default: [terminal, execute_code]
+    description: "Tool names that need a live unlock on messaging platforms."
+  platforms:
+    type: list
+    default: [telegram, discord, slack, whatsapp, signal, matrix, mattermost, sms, email]
+    description: "Platforms Step-Up enforces on. Local CLI and Desktop are never gated."
+  unlock_minutes:
+    type: int
+    default: 10
+    description: "How long one valid code keeps protected tools unlocked."
+  max_failures:
+    type: int
+    default: 5
+    description: "Wrong codes allowed before a 15-minute lockout."

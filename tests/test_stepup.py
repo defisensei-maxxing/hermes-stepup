@@ -62,6 +62,25 @@ ok(g2.on_pre_tool_call("terminal", {}, "", session_id="s3")["action"] == "block"
 # subagent inherits parent
 g2.on_pre_llm_call(session_id="child", platform="", parent_session_id="s3")
 ok(g2.on_pre_tool_call("terminal", {}, "", session_id="child")["action"] == "block", "subagent inherits lock")
+# review #153372: Hermes runs delegate_task children with platform="subagent", sender_id=""
+g8, c8 = mk()
+g8.on_pre_llm_call(session_id="tg", platform="telegram", sender_id="5550001176")
+g8.on_pre_llm_call(session_id="kid", platform="subagent", sender_id="", parent_session_id="tg")
+ok(g8.on_pre_tool_call("terminal", {}, "kid", session_id="kid")["action"] == "block", "subagent child of locked sender is blocked")
+ok(g8.on_pre_tool_call("execute_code", {}, "kid", session_id="kid")["action"] == "block", "subagent child blocked for execute_code too")
+g8.on_pre_llm_call(session_id="grandkid", platform="subagent", sender_id="", parent_session_id="kid")
+ok(g8.on_pre_tool_call("terminal", {}, "grandkid", session_id="grandkid")["action"] == "block", "nested subagent stays blocked")
+ok("Unlocked" in g8.on_post_gateway_admission(platform="telegram", source={"user_id": "5550001176"}, text="unlock " + code(c8))["reply"], "owner unlocks")
+ok(g8.on_pre_tool_call("terminal", {}, "kid", session_id="kid") is None, "subagent child runs once the parent sender is unlocked")
+# child of a local CLI session stays ungated
+g8.on_pre_llm_call(session_id="cli1", platform="cli", sender_id="")
+g8.on_pre_llm_call(session_id="clikid", platform="subagent", sender_id="", parent_session_id="cli1")
+ok(g8.on_pre_tool_call("terminal", {}, "clikid", session_id="clikid") is None, "subagent of a CLI session is not gated")
+# a child whose parent was never seen fails closed
+g8.on_pre_llm_call(session_id="orphan", platform="subagent", sender_id="", parent_session_id="nope")
+ok(g8.on_pre_tool_call("terminal", {}, "orphan", session_id="orphan")["action"] == "block", "orphan subagent fails closed")
+g8.on_pre_llm_call(session_id="orphan2", platform="subagent", sender_id="")
+ok(g8.on_pre_tool_call("terminal", {}, "orphan2", session_id="orphan2")["action"] == "block", "subagent with no parent id fails closed")
 # lockout
 g3, c3 = mk()
 for i in range(4): msg(g3, "unlock 000000")

@@ -60,6 +60,8 @@ it. Step-Up enforces the lock in code:
 Each code works once. Five wrong codes lock that sender out for 15 minutes.
 An unlock belongs to one sender on one platform; other people in a shared bot
 stay locked.
+Sessions started with `delegate_task` inherit the lock state of the chat that
+started them, and a delegated session whose parent Step-Up never saw is blocked.
 
 ## Settings
 

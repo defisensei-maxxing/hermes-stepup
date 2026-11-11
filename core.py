@@ -8,6 +8,8 @@ from . import totp
 LOCKOUT_SECONDS = 15 * 60
 PENDING_SECONDS = 5 * 60
 MAX_SESSIONS = 2000
+SUBAGENT = "subagent"
+UNKNOWN = "stepup:unknown-parent"
 
 DEFAULT_TOOLS = ["terminal", "execute_code"]
 DEFAULT_PLATFORMS = ["telegram", "discord", "slack", "whatsapp", "signal",
@@ -93,12 +95,22 @@ class StepUp:
         """Remember which platform and sender each session belongs to."""
         platform = _norm(platform)
         sender = kwargs.get("sender_id")
-        parent = kwargs.get("parent_session_id")
+        parent = kwargs.get("parent_session_id") or ""
         with self._lock:
-            if parent and parent in self._sessions and (not platform or sender is None):
-                self._sessions[session_id] = self._sessions[parent]
+            if parent and parent in self._sessions:
+                # A delegated child (platform "subagent", sender "") always takes
+                # its parent's identity, so a locked sender cannot reach a
+                # protected tool through delegate_task.
+                ident = self._sessions[parent]
+            elif parent or platform == SUBAGENT:
+                # A child whose parent we never saw: fail closed.
+                ident = (UNKNOWN, "")
             else:
-                self._sessions[session_id] = (platform, "" if sender is None else str(sender))
+                ident = (platform, "" if sender is None else str(sender))
+            self._sessions.pop(session_id, None)      # re-insert as most recent
+            self._sessions[session_id] = ident
+            if parent in self._sessions:              # keep a live parent from being evicted
+                self._sessions[parent] = self._sessions.pop(parent)
             while len(self._sessions) > MAX_SESSIONS:
                 self._sessions.pop(next(iter(self._sessions)))
         return None
@@ -112,6 +124,11 @@ class StepUp:
         if not ident:
             return None  # local CLI/Desktop session, or one we never saw start
         platform, sender = ident
+        if platform == UNKNOWN:
+            return {"action": "block", "message": (
+                "Step-Up lock: '%s' was requested by a delegated session whose parent "
+                "chat Step-Up has not seen, so it cannot tell who asked. Run it from the "
+                "main conversation instead." % tool_name)}
         if platform not in self._list("platforms", DEFAULT_PLATFORMS):
             return None
         if not self._secret():

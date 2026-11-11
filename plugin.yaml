@@ -1,5 +1,5 @@
 name: stepup
-version: "0.1.0"
+version: "0.1.1"
 description: >
   Authenticator-app 2FA for your agent. Protected tools called from messaging
   platforms stay locked until the sender proves presence with a one-time code.
